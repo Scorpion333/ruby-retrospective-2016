@@ -5,27 +5,13 @@ module ParseHelpers
     end
   end
   
-  def parse_WTF_options(runner, long_options)
-    argv.select { |string| string.start_with? '--' }.each do |string|
-      if string[1] == '-'
-	    option_name = string.split('=')[0]
-		parameter = string.split('=')[1]
-      else
-        option_name = string[0..1]
-        parameter = string[2].nil? ? nil : string[2..-1]
-      end
-      value = parameter || true
-	  @options[option_name][:block].call(runner, value) if @options.has_key?(option_name)
-    end
-  end
-  
   def parse_long_options(runner, long_options)
     long_options.each do |string|
       option_name = string.split('=')[0][2..-1]
       parameter = string.split('=')[1]
       value = parameter || true
-      @options.find { |hash| hash[:long] ==  option_name }[:block].call(runner, value)
-      # the_option # unless the_option.nil?
+      the_option = @options.find { |hash| hash[:long] == option_name }
+      the_option[:block].call(runner, value)
     end
   end
   
@@ -34,7 +20,8 @@ module ParseHelpers
       option_name = string[1]
       parameter = string[2..-1] unless string[2].nil?
       value = parameter || true
-      @options.find { |hash| hash[:short] ==  option_name }[:block].call(runner, value)
+      the_option = @options.find { |hash| hash[:short] == option_name }
+      the_option[:block].call(runner, value)
     end
   end
 end
@@ -44,20 +31,23 @@ class CommandParser
 
   def initialize(command_name)
     @command_name = command_name
-	@arguments = []
-	@options = []
+    @arguments = []
+    @options = []
   end
   
   def argument(name, &block)
     @arguments.push({block: block, name: name})
   end
   
-  def option (short, long, description, &block)
-    @options.push({short: short, long: long, block: block, description: description})
+  def option(short, long, description, &block)
+    hash = {short: short, long: long, block: block, description: description}
+    @options.push(hash)
   end
   
-  def option_with_parameter (short, long, description, parameter, &block)
-    @options.push({short: short, long: long, block: block, description: description, parameter: parameter})
+  def option_with_parameter(short, long, description, parameter, &block)
+    hash = {short: short, long: long, block: block, description: description, parameter: parameter}
+    @options.push(hash)
+    # @options.last[:parameter] = parameter
   end
   
   def parse(command_runner, argv)
@@ -73,16 +63,16 @@ class CommandParser
   def help
     usage_string = 'Usage: ' + @command_name
     
-	@arguments.each do |hash|
+    @arguments.each do |hash|
       usage_string += ' [' + hash[:name] + ']'
     end
-	
+
     @options.each do |hash|
-	  usage_string += "\n    -" + hash[:short] + ', --' + hash[:long]
-      usage_string += '=' + hash[:parameter] if hash.has_key?(:parameter) 
+      usage_string += "\n    -" + hash[:short] + ', --' + hash[:long]
+      usage_string += '=' + hash[:parameter] if hash.key?(:parameter) 
       usage_string += ' ' + hash[:description]
-	end
-	
+    end
+
     usage_string
   end
 end
