@@ -1,39 +1,40 @@
-class String
-  def argument?
-    self[0] == '-'
-  end
-  
-  def option?
-    self[0] == '-'
-  end
-  
-  def short_option?
-    option? && self[1] != '-'
-  end
-  
-  def long_option?
-    option? && self[1] == '-'
-  end
-end
-
 module ParseHelpers
-  def parse_arguments(runner, argv)
-    argv.select { |string| string[0] != '-' }.each_with_index do |argument, index|
-      @arguments[index][:block].call(runner, argument)
+  def parse_arguments(runner, argument_values)
+    argument_values.each_with_index do |value, index|
+      @arguments[index][:block].call(runner, value)
     end
   end
   
-  def parse_options(runner, argv)
-    argv.select { |string| string[0] == '-' }.each do |string|
-      if string[1] == '-'	  
+  def parse_WTF_options(runner, long_options)
+    argv.select { |string| string.start_with? '--' }.each do |string|
+      if string[1] == '-'
 	    option_name = string.split('=')[0]
 		parameter = string.split('=')[1]
       else
         option_name = string[0..1]
-        parameter = string[2..-1]
+        parameter = string[2].nil? ? nil : string[2..-1]
       end
-      value = (parameter.nil? || parameter == '') ? true : parameter
+      value = parameter || true
 	  @options[option_name][:block].call(runner, value) if @options.has_key?(option_name)
+    end
+  end
+  
+  def parse_long_options(runner, long_options)
+    long_options.each do |string|
+      option_name = string.split('=')[0][2..-1]
+      parameter = string.split('=')[1]
+      value = parameter || true
+      @options.find { |hash| hash[:long] ==  option_name }[:block].call(runner, value)
+      # the_option # unless the_option.nil?
+    end
+  end
+  
+  def parse_short_options(runner, short_options)
+    short_options.each do |string|
+      option_name = string[1]
+      parameter = string[2..-1] unless string[2].nil?
+      value = parameter || true
+      @options.find { |hash| hash[:short] ==  option_name }[:block].call(runner, value)
     end
   end
 end
@@ -44,7 +45,7 @@ class CommandParser
   def initialize(command_name)
     @command_name = command_name
 	@arguments = []
-	@options = {}
+	@options = []
   end
   
   def argument(name, &block)
@@ -52,37 +53,36 @@ class CommandParser
   end
   
   def option (short, long, description, &block)
-    option_data = {block: block, description: description}
-    @options['-' + short] = option_data
-    @options['--' + long] = option_data.merge({short: "-#{short}"})
+    @options.push({short: short, long: long, block: block, description: description})
   end
   
   def option_with_parameter (short, long, description, parameter, &block)
-    option_data = {block: block, description: description, parameter: parameter}
-    @options['-' + short] = option_data
-    @options['--' + long] = option_data.merge({short: "-#{short}"})
+    @options.push({short: short, long: long, block: block, description: description, parameter: parameter})
   end
   
   def parse(command_runner, argv)
-    parse_arguments(command_runner, argv)
-    parse_options(command_runner, argv)
+    argument_values = argv.select { |string| string[0] != '-' }
+    long_options = argv.select { |string| string.start_with? '--' }
+    short_options = argv - argument_values - long_options
+    
+    parse_arguments(command_runner, argument_values)
+    parse_long_options(command_runner, long_options)
+    parse_short_options(command_runner, short_options)
   end
   
   def help
     usage_string = 'Usage: ' + @command_name
+    
+	@arguments.each do |hash|
+      usage_string += ' [' + hash[:name] + ']'
+    end
 	
-	@arguments.each do |argument_hash|
-	  usage_string += ' [' + argument_hash[:name] + ']'
+    @options.each do |hash|
+	  usage_string += "\n    -" + hash[:short] + ', --' + hash[:long]
+      usage_string += '=' + hash[:parameter] if hash.has_key?(:parameter) 
+      usage_string += ' ' + hash[:description]
 	end
 	
-	@options.each_key do |key|
-	  if key[0..1] == '--'
-		usage_string += "\n    " + @options[key][:short] + ', ' + key
-        usage_string += '=' + @options[key][:parameter] if @options[key].has_key?(:parameter) 
-        usage_string += ' ' + @options[key][:description]
-	  end
-	end
-	
-	usage_string
+    usage_string
   end
 end
